@@ -17,6 +17,9 @@ public class NotificationEntity {
     @Column(name = "NOTIFICATION_ID")
     private Long notificationId;
 
+    @Column(name = "USER_ID")
+    private Long userId;
+
     @Column(name = "TITLE")
     private String title;
 
@@ -39,7 +42,13 @@ public class NotificationEntity {
     private String clickAction;
 
     @Column(name = "IS_ACTIVE")
-    private Boolean isActive;
+    private Boolean isActive = true;
+
+    @Column(name = "IS_SENT")
+    private Boolean isSent = false;
+
+    @Column(name = "SEND_AT")
+    private LocalDateTime sendAt;
 
     @Column(name = "CREATED_AT",
             insertable = false,

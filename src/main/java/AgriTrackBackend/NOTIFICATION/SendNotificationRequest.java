@@ -22,4 +22,8 @@ public class SendNotificationRequest {
     private String notificationType;
 
     private String clickAction;
+
+    // FORMAT:
+    // 2026-05-23T20:30:00
+    private String sendAt;
 }

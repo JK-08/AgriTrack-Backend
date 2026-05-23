@@ -12,8 +12,22 @@ public class GoogleAuthController {
     private GoogleAuthService service;
 
     @PostMapping("/login")
-    public Object googleLogin(@RequestBody GoogleLoginRequest request) throws Exception {
+    public Object googleLogin(
+            @RequestBody GoogleLoginRequest request
+    ) {
 
-        return service.loginWithGoogle(request.getIdToken());
+        try {
+
+            return service.loginWithGoogle(
+                    request.getIdToken()
+            );
+
+        } catch (Exception e) {
+
+            return new ErrorResponse(
+                    false,
+                    "Invalid or Expired Google Token"
+            );
+        }
     }
 }

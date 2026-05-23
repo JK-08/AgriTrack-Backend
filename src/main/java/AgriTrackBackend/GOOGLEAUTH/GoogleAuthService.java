@@ -24,61 +24,86 @@ public class GoogleAuthService {
     @Autowired
     private JwtUtil jwtUtil;
 
-    // ✅ Replace with your GOOGLE WEB CLIENT ID
     private static final String CLIENT_ID =
-            "YOUR_GOOGLE_WEB_CLIENT_ID";
+            "740018456459-c47e4vmglnkvjvjpemcrhvkfk1v09618.apps.googleusercontent.com";
 
-    public Object loginWithGoogle(String idTokenString) throws Exception {
+    public GoogleLoginResponse loginWithGoogle(
+            String idTokenString
+    ) throws Exception {
 
-        GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
-                new NetHttpTransport(),
-                GsonFactory.getDefaultInstance()
-        )
-                .setAudience(Collections.singletonList(CLIENT_ID))
-                .build();
+        GoogleIdTokenVerifier verifier =
+                new GoogleIdTokenVerifier.Builder(
+                        new NetHttpTransport(),
+                        GsonFactory.getDefaultInstance()
+                )
+                        .setAudience(
+                                Collections.singletonList(
+                                        CLIENT_ID
+                                )
+                        )
+                        .build();
 
-        GoogleIdToken idToken = verifier.verify(idTokenString);
+        GoogleIdToken idToken =
+                verifier.verify(idTokenString);
 
         if (idToken == null) {
-            throw new RuntimeException("Invalid Google Token");
+
+            throw new RuntimeException(
+                    "Invalid Google Token"
+            );
         }
 
-        GoogleIdToken.Payload payload = idToken.getPayload();
+        GoogleIdToken.Payload payload =
+                idToken.getPayload();
 
         String email = payload.getEmail();
-        String name = (String) payload.get("name");
 
-        User user = userRepository.findByEmail(email).orElse(null);
+        String name =
+                (String) payload.get("name");
 
-        // ✅ Auto register if user not exists
+        User user =
+                userRepository.findByEmail(email)
+                        .orElse(null);
+
+        // AUTO REGISTER
         if (user == null) {
 
             user = new User();
+
             user.setName(name);
+
             user.setEmail(email);
 
-            // dummy mobile
             user.setMobileNo("GOOGLE_USER");
 
-            // no password
             user.setPassword("GOOGLE_LOGIN");
 
-            // default role
             user.setRole(Role.CUSTOMER);
 
             user = userRepository.save(user);
         }
 
-        String jwtToken = jwtUtil.generateToken(
-                user.getEmail(),
-                user.getRole().name()
-        );
+        String jwtToken =
+                jwtUtil.generateToken(
+                        user.getEmail(),
+                        user.getRole().name()
+                );
 
-        return new AgriTrackBackend.USERS.LoginResponse(
+        return new GoogleLoginResponse(
+
+                true,
+
+                "Google Login Success",
+
                 jwtToken,
-                user.getRole().name(),
+
+                user.getUserId(),
+
                 user.getName(),
-                user.getUserId()
+
+                user.getEmail(),
+
+                user.getRole().name()
         );
     }
 }

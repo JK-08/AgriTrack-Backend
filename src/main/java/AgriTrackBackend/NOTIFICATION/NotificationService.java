@@ -2,8 +2,10 @@ package AgriTrackBackend.NOTIFICATION;
 
 import com.google.firebase.messaging.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -15,21 +17,27 @@ public class NotificationService {
     @Autowired
     private UserNotificationTokenRepository tokenRepository;
 
-    // SAVE TEMPLATE
-    public NotificationEntity save(NotificationEntity entity) {
+    // SAVE
+    public NotificationEntity save(
+            NotificationEntity entity
+    ) {
+
+        entity.setIsSent(false);
+
         return repository.save(entity);
     }
 
     // GET ALL
     public List<NotificationEntity> getAll() {
+
         return repository
                 .findByIsActiveTrueOrderByNotificationIdDesc();
     }
 
-    // SEND TO USER
+    // SEND SINGLE PUSH
     public String sendNotification(
             String token,
-            SendNotificationRequest request
+            NotificationEntity request
     ) throws Exception {
 
         Notification notification =
@@ -44,21 +52,42 @@ public class NotificationService {
 
                 .setNotification(notification)
 
-                // CUSTOM DATA
-                .putData("imageUrl",
-                        request.getImageUrl())
+                .putData(
+                        "imageUrl",
+                        request.getImageUrl() == null
+                                ? ""
+                                : request.getImageUrl()
+                )
 
-                .putData("screenName",
-                        request.getScreenName())
+                .putData(
+                        "screenName",
+                        request.getScreenName() == null
+                                ? ""
+                                : request.getScreenName()
+                )
 
-                .putData("timerSeconds",
-                        String.valueOf(request.getTimerSeconds()))
+                .putData(
+                        "timerSeconds",
+                        String.valueOf(
+                                request.getTimerSeconds() == null
+                                        ? 0
+                                        : request.getTimerSeconds()
+                        )
+                )
 
-                .putData("notificationType",
-                        request.getNotificationType())
+                .putData(
+                        "notificationType",
+                        request.getNotificationType() == null
+                                ? ""
+                                : request.getNotificationType()
+                )
 
-                .putData("clickAction",
-                        request.getClickAction())
+                .putData(
+                        "clickAction",
+                        request.getClickAction() == null
+                                ? ""
+                                : request.getClickAction()
+                )
 
                 .build();
 
@@ -67,21 +96,69 @@ public class NotificationService {
                 .send(message);
     }
 
-    // SEND TO USER ID
+    // SEND TO USER
     public void sendToUser(
-            Long userId,
-            SendNotificationRequest request
+            NotificationEntity request
     ) throws Exception {
 
         List<UserNotificationToken> tokens =
-                tokenRepository.findByUserId(userId);
+                tokenRepository
+                        .findByUserIdAndIsActiveTrue(
+                                request.getUserId()
+                        );
 
         for (UserNotificationToken token : tokens) {
 
-            sendNotification(
-                    token.getFcmToken(),
-                    request
-            );
+            try {
+
+                sendNotification(
+                        token.getFcmToken(),
+                        request
+                );
+
+            } catch (Exception e) {
+
+                System.out.println(
+                        "FCM Failed : "
+                                + token.getFcmToken()
+                );
+            }
+        }
+
+        request.setIsSent(true);
+
+        repository.save(request);
+    }
+
+    // AUTO SEND
+    @Scheduled(fixedRate = 10000)
+    public void autoSendNotifications() {
+
+        List<NotificationEntity> notifications =
+                repository
+                        .findByIsSentFalseAndSendAtLessThanEqual(
+                                LocalDateTime.now()
+                        );
+
+        for (NotificationEntity notification : notifications) {
+
+            try {
+
+                sendToUser(notification);
+
+                System.out.println(
+                        "Notification Sent : "
+                                + notification.getNotificationId()
+                );
+
+            } catch (Exception e) {
+
+                System.out.println(
+                        "Notification Failed"
+                );
+
+                e.printStackTrace();
+            }
         }
     }
 }

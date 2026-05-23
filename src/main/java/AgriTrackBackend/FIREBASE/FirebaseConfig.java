@@ -16,39 +16,27 @@ public class FirebaseConfig {
 
         try {
 
-            // ✅ Read firebase-service-account.json
             InputStream serviceAccount =
-                    getClass()
-                            .getClassLoader()
-                            .getResourceAsStream(
-                                    "firebase-service-account.json"
-                            );
+                    getClass().getClassLoader()
+                            .getResourceAsStream("firebase/agritrack-8ef35-58baa73294ae.json");
 
-            FirebaseOptions options =
-                    FirebaseOptions.builder()
-                            .setCredentials(
-                                    GoogleCredentials
-                                            .fromStream(serviceAccount)
-                            )
-                            .build();
-
-            // ✅ Initialize Firebase
-            if (FirebaseApp.getApps().isEmpty()) {
-
-                FirebaseApp.initializeApp(options);
-
-                System.out.println(
-                        "✅ Firebase Initialized Successfully"
-                );
+            if (serviceAccount == null) {
+                throw new RuntimeException("Firebase JSON file not found");
             }
 
+            FirebaseOptions options = FirebaseOptions.builder()
+                    .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                    .build();
+
+            if (FirebaseApp.getApps().isEmpty()) {
+                FirebaseApp.initializeApp(options);
+            }
+
+            System.out.println("✅ Firebase Initialized");
+
         } catch (Exception e) {
-
             e.printStackTrace();
-
-            System.out.println(
-                    "❌ Firebase Initialization Failed"
-            );
+            System.out.println("❌ Firebase Initialization Failed");
         }
     }
 }
