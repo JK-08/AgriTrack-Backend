@@ -1,8 +1,44 @@
 /* =====================================================================
-   AgriTrack - SQL Server schema for the new modules
+   AgriTrack - Full SQL Server schema
    (spring.jpa.hibernate.ddl-auto=none, so tables are created manually)
-   Run once against database "users1". Existing USERS table is reused.
+
+   Run this ONCE against the new database "AGRITRACK"
+   (server 103.91.218.31,1922) before starting the backend.
+   Column names/types/lengths mirror the @Column annotations on the
+   JPA entities exactly - do not rename without updating both sides.
    ===================================================================== */
+
+/* ---------- USERS ---------- */
+IF OBJECT_ID('dbo.USERS', 'U') IS NULL
+CREATE TABLE dbo.USERS (
+    USER_ID       BIGINT IDENTITY(1,1) PRIMARY KEY,
+    NAME          NVARCHAR(255) NULL,
+    MOBILE_NO     NVARCHAR(15)  NULL,
+    EMAIL         NVARCHAR(255) NULL UNIQUE,
+    PASSWORD      NVARCHAR(255) NULL,
+    ROLE          NVARCHAR(255) NULL,
+    CREATED_AT    DATETIME      NOT NULL DEFAULT GETDATE()
+);
+
+/* ---------- ONBOARDINGS ---------- */
+IF OBJECT_ID('dbo.ONBOARDINGS', 'U') IS NULL
+CREATE TABLE dbo.ONBOARDINGS (
+    ONBOARDING_ID  BIGINT IDENTITY(1,1) PRIMARY KEY,
+    TITLE          NVARCHAR(150) NOT NULL,
+    SUBTITLE       NVARCHAR(255) NULL,
+    IMAGE_URL      NVARCHAR(500) NULL,
+    CREATED_AT     DATETIME      NOT NULL DEFAULT GETDATE()
+);
+
+/* ---------- MPINS ---------- */
+IF OBJECT_ID('dbo.MPINS', 'U') IS NULL
+CREATE TABLE dbo.MPINS (
+    MPIN_ID     BIGINT IDENTITY(1,1) PRIMARY KEY,
+    USER_ID     BIGINT        NOT NULL UNIQUE
+        REFERENCES dbo.USERS(USER_ID),
+    MPIN        NVARCHAR(255) NULL,
+    CREATED_AT  DATETIME      NOT NULL DEFAULT GETDATE()
+);
 
 /* ---------- CUSTOMERS ---------- */
 IF OBJECT_ID('dbo.CUSTOMERS', 'U') IS NULL
@@ -179,4 +215,33 @@ CREATE TABLE dbo.RATINGS (
     RATING_VALUE  INT            NULL,
     REVIEW        NVARCHAR(1000) NULL,
     CREATED_AT    DATETIME       NOT NULL DEFAULT GETDATE()
+);
+
+/* ---------- NOTIFICATIONS ---------- */
+IF OBJECT_ID('dbo.NOTIFICATIONS', 'U') IS NULL
+CREATE TABLE dbo.NOTIFICATIONS (
+    NOTIFICATION_ID     BIGINT IDENTITY(1,1) PRIMARY KEY,
+    USER_ID             BIGINT        NULL,
+    TITLE               NVARCHAR(255) NULL,
+    SUBTITLE            NVARCHAR(500) NULL,
+    IMAGE_URL           NVARCHAR(1000) NULL,
+    SCREEN_NAME         NVARCHAR(255) NULL,
+    TIMER_SECONDS       INT           NULL,
+    NOTIFICATION_TYPE   NVARCHAR(255) NULL,
+    CLICK_ACTION        NVARCHAR(255) NULL,
+    IS_ACTIVE           BIT           NOT NULL DEFAULT 1,
+    IS_SENT             BIT           NOT NULL DEFAULT 0,
+    SEND_AT             DATETIME      NULL,
+    CREATED_AT          DATETIME      NOT NULL DEFAULT GETDATE()
+);
+
+/* ---------- USER_NOTIFICATION_TOKENS ---------- */
+IF OBJECT_ID('dbo.USER_NOTIFICATION_TOKENS', 'U') IS NULL
+CREATE TABLE dbo.USER_NOTIFICATION_TOKENS (
+    TOKEN_ID      BIGINT IDENTITY(1,1) PRIMARY KEY,
+    USER_ID       BIGINT        NULL,
+    FCM_TOKEN     NVARCHAR(500) NOT NULL UNIQUE,
+    DEVICE_TYPE   NVARCHAR(255) NULL,
+    IS_ACTIVE     BIT           NOT NULL DEFAULT 1,
+    CREATED_AT    DATETIME      NOT NULL DEFAULT GETDATE()
 );
