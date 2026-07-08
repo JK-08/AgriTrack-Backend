@@ -49,6 +49,7 @@ public class SecurityConfig {
 
                         // ✅ PUBLIC APIs — no login required
                         .requestMatchers(
+                                "/api/v1/health",
                                 "/api/v1/user/register",
                                 "/api/v1/user/login",
                                 "/api/v1/google/login",

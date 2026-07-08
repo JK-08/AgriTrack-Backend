@@ -55,6 +55,14 @@ public class RateLimitFilter implements Filter {
             return;
         }
 
+        // ✅ Cold-start probe — the frontend's boot gate polls this every few
+        // seconds while Render wakes the instance up, from a single IP, before
+        // the user has done anything. It must never be throttled.
+        if (path.equals("/api/v1/health")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String ip = DeviceInfo.clientIp(req);
         RateLimit rule = classify(path);
         String key = ip + ":" + rule.category;
