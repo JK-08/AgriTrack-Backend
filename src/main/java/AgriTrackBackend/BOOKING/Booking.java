@@ -28,6 +28,10 @@ public class Booking {
     @Column(name = "TRACTOR_ID")
     private Long tractorId;
 
+    // the driver assigned by the owner to fulfil this booking
+    @Column(name = "DRIVER_ID")
+    private Long driverId;
+
     @Column(name = "SERVICE_TYPE", length = 100)
     private String serviceType;
 

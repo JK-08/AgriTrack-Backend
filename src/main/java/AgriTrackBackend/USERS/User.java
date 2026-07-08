@@ -1,6 +1,9 @@
 package AgriTrackBackend.USERS;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -17,6 +20,7 @@ public class User {
     @Column(name = "USER_ID")
     private Long userId;
 
+    @NotBlank(message = "Name is required")
     @Column(name = "NAME")
     private String name;
 
@@ -26,9 +30,12 @@ public class User {
     @Column(name = "EMAIL", unique = true)
     private String email;
 
+    @NotBlank(message = "Password is required")
+    @Size(min = 6, message = "Password must be at least 6 characters")
     @Column(name = "PASSWORD")
     private String password;
 
+    @NotNull(message = "Role is required")
     @Enumerated(EnumType.STRING)
     @Column(name = "ROLE")
     private Role role;

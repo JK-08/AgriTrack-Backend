@@ -1,6 +1,11 @@
 package AgriTrackBackend.MPIN;
 
+import AgriTrackBackend.AUDIT.AuditAction;
+import AgriTrackBackend.AUDIT.AuditService;
 import AgriTrackBackend.SECURITY.JwtUtil;
+import AgriTrackBackend.SESSION.AuthResponse;
+import AgriTrackBackend.SESSION.DeviceInfo;
+import AgriTrackBackend.SESSION.SessionService;
 import AgriTrackBackend.USERS.LoginResponse;
 import AgriTrackBackend.USERS.User;
 import AgriTrackBackend.USERS.UserRepository;
@@ -24,6 +29,12 @@ public class MpinService {
     @Autowired
     private BCryptPasswordEncoder passwordEncoder;
 
+    @Autowired
+    private SessionService sessionService;
+
+    @Autowired
+    private AuditService auditService;
+
     // ✅ CREATE MPIN
     public String createMpin(String token, CreateMpinRequest request) {
 
@@ -42,6 +53,9 @@ public class MpinService {
         mpin.setMpin(passwordEncoder.encode(request.getMpin()));
 
         mpinRepository.save(mpin);
+
+        // never log the MPIN itself — metadata only
+        auditService.log(AuditAction.CREATE, "Mpin", user.getUserId(), null, null);
 
         return "MPIN created successfully";
     }
@@ -65,6 +79,8 @@ public class MpinService {
 
         mpinRepository.save(mpin);
 
+        auditService.log(AuditAction.UPDATE, "Mpin", user.getUserId(), null, null);
+
         return "MPIN updated successfully";
     }
 
@@ -87,6 +103,8 @@ public class MpinService {
 
         mpinRepository.save(mpin);
 
+        auditService.log(AuditAction.MPIN_RESET, "Mpin", user.getUserId(), null, null);
+
         return "MPIN reset successfully";
     }
 
@@ -103,31 +121,34 @@ public class MpinService {
 
         mpinRepository.delete(mpin);
 
+        auditService.log(AuditAction.DELETE, "Mpin", user.getUserId(), null, null);
+
         return "MPIN deleted successfully";
     }
 
     // ✅ LOGIN WITH MPIN
-    public LoginResponse loginWithMpin(LoginMpinRequest request) {
+    public LoginResponse loginWithMpin(LoginMpinRequest request, DeviceInfo device, String ip) {
 
         Mpin mpin = mpinRepository.findByUserMobileNo(request.getMobileNo())
                 .orElseThrow(() -> new RuntimeException("MPIN not found"));
 
         if (!passwordEncoder.matches(request.getMpin(), mpin.getMpin())) {
+            sessionService.recordFailedLogin(mpin.getUser().getUserId(), ip, device, "Invalid MPIN");
             throw new RuntimeException("Invalid MPIN");
         }
 
         User user = mpin.getUser();
 
-        String token = jwtUtil.generateToken(
-                user.getEmail(),
-                user.getRole().name()
-        );
+        AuthResponse auth = sessionService.createSession(user, device, ip);
 
         return new LoginResponse(
-                token,
-                user.getRole().name(),
-                user.getName(),
-                user.getUserId()
+                auth.getAccessToken(),
+                auth.getRole(),
+                auth.getName(),
+                auth.getUserId(),
+                auth.getRefreshToken(),
+                auth.getExpiresIn(),
+                auth.getSessionId()
         );
     }
 }

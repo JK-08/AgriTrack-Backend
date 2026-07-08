@@ -1,6 +1,11 @@
 package AgriTrackBackend.GOOGLEAUTH;
 
+import AgriTrackBackend.AUDIT.AuditAction;
+import AgriTrackBackend.AUDIT.AuditService;
 import AgriTrackBackend.SECURITY.JwtUtil;
+import AgriTrackBackend.SESSION.AuthResponse;
+import AgriTrackBackend.SESSION.DeviceInfo;
+import AgriTrackBackend.SESSION.SessionService;
 import AgriTrackBackend.USERS.Role;
 import AgriTrackBackend.USERS.User;
 import AgriTrackBackend.USERS.UserRepository;
@@ -11,6 +16,7 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.http.javanet.NetHttpTransport;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -24,11 +30,18 @@ public class GoogleAuthService {
     @Autowired
     private JwtUtil jwtUtil;
 
-    private static final String CLIENT_ID =
-            "740018456459-c47e4vmglnkvjvjpemcrhvkfk1v09618.apps.googleusercontent.com";
+    @Autowired
+    private SessionService sessionService;
+
+    @Autowired
+    private AuditService auditService;
+
+    // externalized — was hardcoded; see GOOGLE_CLIENT_ID in .env.example
+    @Value("${google.client-id}")
+    private String CLIENT_ID;
 
     public GoogleLoginResponse loginWithGoogle(
-            String idTokenString
+            String idTokenString, DeviceInfo device, String ip
     ) throws Exception {
 
         GoogleIdTokenVerifier verifier =
@@ -81,13 +94,12 @@ public class GoogleAuthService {
             user.setRole(Role.CUSTOMER);
 
             user = userRepository.save(user);
+            // never log password/credential fields — metadata only
+            auditService.log(AuditAction.CREATE, "User", user.getUserId(), null,
+                    java.util.Map.of("email", user.getEmail(), "source", "GOOGLE_AUTO_REGISTER"));
         }
 
-        String jwtToken =
-                jwtUtil.generateToken(
-                        user.getEmail(),
-                        user.getRole().name()
-                );
+        AuthResponse auth = sessionService.createSession(user, device, ip);
 
         return new GoogleLoginResponse(
 
@@ -95,7 +107,7 @@ public class GoogleAuthService {
 
                 "Google Login Success",
 
-                jwtToken,
+                auth.getAccessToken(),
 
                 user.getUserId(),
 
@@ -103,7 +115,13 @@ public class GoogleAuthService {
 
                 user.getEmail(),
 
-                user.getRole().name()
+                user.getRole().name(),
+
+                auth.getRefreshToken(),
+
+                auth.getExpiresIn(),
+
+                auth.getSessionId()
         );
     }
 }

@@ -1,7 +1,14 @@
 package AgriTrackBackend.NOTIFICATION;
 
+import AgriTrackBackend.AUDIT.AuditAction;
+import AgriTrackBackend.AUDIT.AuditService;
+import AgriTrackBackend.COMMON.PageResponse;
+import AgriTrackBackend.COMMON.PaginationUtil;
+import AgriTrackBackend.EXCEPTION.ForbiddenException;
+import AgriTrackBackend.SECURITY.CurrentUser;
 import com.google.firebase.messaging.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -17,14 +24,25 @@ public class NotificationService {
     @Autowired
     private UserNotificationTokenRepository tokenRepository;
 
-    // SAVE
+    @Autowired
+    private AuditService auditService;
+
+    @Autowired
+    private NotificationPreferenceService preferenceService;
+
+    // SAVE — only owners push notifications out today (e.g. to their customers/drivers)
     public NotificationEntity save(
             NotificationEntity entity
     ) {
+        if (!CurrentUser.isRole("OWNER")) {
+            throw new ForbiddenException("Only owners can send notifications");
+        }
 
         entity.setIsSent(false);
 
-        return repository.save(entity);
+        NotificationEntity saved = repository.save(entity);
+        auditService.log(AuditAction.CREATE, "Notification", saved.getNotificationId(), null, saved);
+        return saved;
     }
 
     // GET ALL
@@ -32,6 +50,22 @@ public class NotificationService {
 
         return repository
                 .findByIsActiveTrueOrderByNotificationIdDesc();
+    }
+
+    // GET BY USER — used by client/owner/driver apps to show their own alerts
+    public List<NotificationEntity> getByUser(Long userId) {
+        CurrentUser.requireSelf(userId);
+        return repository
+                .findByUserIdAndIsActiveTrueOrderByNotificationIdDesc(userId);
+    }
+
+    public PageResponse<NotificationEntity> searchPaged(Long userId, String search, String notificationType, Boolean isSent,
+                                                          Integer page, Integer size, String sortBy, String sortDir) {
+        CurrentUser.requireSelf(userId);
+        Pageable pageable = PaginationUtil.build(page, size, sortBy, sortDir, "createdAt");
+        String s = (search == null || search.isBlank()) ? null : search;
+        String nt = (notificationType == null || notificationType.isBlank()) ? null : notificationType;
+        return PageResponse.of(repository.search(userId, s, nt, isSent, pageable));
     }
 
     // SEND SINGLE PUSH
@@ -101,33 +135,43 @@ public class NotificationService {
             NotificationEntity request
     ) throws Exception {
 
-        List<UserNotificationToken> tokens =
-                tokenRepository
-                        .findByUserIdAndIsActiveTrue(
-                                request.getUserId()
-                        );
+        // ✅ Module 6 — respect the recipient's push preference for this
+        // notification type before touching FCM. In-app visibility (the
+        // /notification/user/{userId} list) is unaffected — the record is
+        // always saved so users can still see it in-app even if push is off.
+        boolean pushAllowed = preferenceService.isPushEnabled(request.getUserId(), request.getNotificationType());
 
-        for (UserNotificationToken token : tokens) {
+        if (pushAllowed) {
+            List<UserNotificationToken> tokens =
+                    tokenRepository
+                            .findByUserIdAndIsActiveTrue(
+                                    request.getUserId()
+                            );
 
-            try {
+            for (UserNotificationToken token : tokens) {
 
-                sendNotification(
-                        token.getFcmToken(),
-                        request
-                );
+                try {
 
-            } catch (Exception e) {
+                    sendNotification(
+                            token.getFcmToken(),
+                            request
+                    );
 
-                System.out.println(
-                        "FCM Failed : "
-                                + token.getFcmToken()
-                );
+                } catch (Exception e) {
+
+                    System.out.println(
+                            "FCM Failed : "
+                                    + token.getFcmToken()
+                    );
+                }
             }
         }
 
         request.setIsSent(true);
 
-        repository.save(request);
+        NotificationEntity saved = repository.save(request);
+        auditService.log(AuditAction.STATUS_CHANGE, "Notification", saved.getNotificationId(), null,
+                java.util.Map.of("isSent", true));
     }
 
     // AUTO SEND

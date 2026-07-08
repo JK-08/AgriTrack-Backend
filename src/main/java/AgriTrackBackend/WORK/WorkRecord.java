@@ -28,6 +28,14 @@ public class WorkRecord {
     @Column(name = "TRACTOR_ID")
     private Long tractorId;
 
+    // the driver who actually carried out this work session
+    @Column(name = "DRIVER_ID")
+    private Long driverId;
+
+    // the booking this work session fulfils (nullable for owner-initiated ad-hoc work)
+    @Column(name = "BOOKING_ID")
+    private Long bookingId;
+
     @Column(name = "RATE_ID")
     private Long rateId;
 

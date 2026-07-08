@@ -1,0 +1,22 @@
+-- Owner-recorded business expenses (fuel, repairs, spares, insurance,
+-- driver salary, EMI, taxes, misc). Feeds Profit & Loss alongside PAYMENTS.
+
+CREATE TABLE EXPENSES (
+    EXPENSE_ID    BIGINT IDENTITY(1,1) PRIMARY KEY,
+    OWNER_ID      BIGINT NOT NULL,
+    TRACTOR_ID    BIGINT NULL,          -- optional: expense tied to a specific tractor
+    DRIVER_ID     BIGINT NULL,          -- optional: e.g. driver salary/incentive expenses
+    CATEGORY      VARCHAR(30)   NOT NULL, -- FUEL / REPAIRS / SPARE_PARTS / INSURANCE / DRIVER_SALARY / EMI / TAXES / MISC
+    AMOUNT        DECIMAL(12,2) NOT NULL,
+    EXPENSE_DATE  DATE          NOT NULL,
+    PAYMENT_METHOD VARCHAR(30)  NULL,   -- CASH / UPI / CARD / BANK
+    VENDOR        VARCHAR(150)  NULL,
+    DESCRIPTION   VARCHAR(500)  NULL,
+    BILL_URL      VARCHAR(500)  NULL,   -- receipt/bill image, uploaded via existing CloudinaryService
+    CREATED_AT    DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_EXPENSES_TRACTOR FOREIGN KEY (TRACTOR_ID) REFERENCES TRACTORS(TRACTOR_ID),
+    CONSTRAINT FK_EXPENSES_DRIVER  FOREIGN KEY (DRIVER_ID)  REFERENCES DRIVERS(DRIVER_ID)
+);
+
+CREATE INDEX IX_EXPENSES_OWNER ON EXPENSES (OWNER_ID, EXPENSE_DATE);
+CREATE INDEX IX_EXPENSES_CATEGORY ON EXPENSES (OWNER_ID, CATEGORY);

@@ -1,5 +1,14 @@
 package AgriTrackBackend.NOTIFICATION;
 
+import AgriTrackBackend.AUDIT.AuditAction;
+import AgriTrackBackend.AUDIT.AuditService;
+import AgriTrackBackend.COMMON.PageResponse;
+import AgriTrackBackend.EXCEPTION.ForbiddenException;
+import AgriTrackBackend.EXCEPTION.ResourceNotFoundException;
+import AgriTrackBackend.SECURITY.CurrentUser;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,6 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/notification")
 @CrossOrigin
+@Tag(name = "Notifications", description = "Push notifications sent to users, plus device-token management")
 public class NotificationController {
 
     @Autowired
@@ -19,6 +29,12 @@ public class NotificationController {
 
     @Autowired
     private UserNotificationTokenRepository tokenRepository;
+
+    @Autowired
+    private AuditService auditService;
+
+    @Autowired
+    private NotificationPreferenceService preferenceService;
 
     // CREATE
     @PostMapping("/create")
@@ -66,18 +82,50 @@ public class NotificationController {
         return service.getAll();
     }
 
+    // GET BY USER
+    @GetMapping("/user/{userId}")
+    public List<NotificationEntity> getByUser(
+            @PathVariable Long userId
+    ) {
+
+        return service.getByUser(userId);
+    }
+
+    @Operation(summary = "Paged/search/filter/sort notification list",
+            description = "?search matches title. ?notificationType/?isSent filter exactly. Additive.")
+    @GetMapping("/search-paged/{userId}")
+    public PageResponse<NotificationEntity> searchPaged(
+            @PathVariable Long userId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String notificationType,
+            @RequestParam(required = false) Boolean isSent,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDir
+    ) {
+        return service.searchPaged(userId, search, notificationType, isSent, page, size, sortBy, sortDir);
+    }
+
+    // ✅ shared guard for every endpoint below that takes a notification id directly:
+    // only the recipient, or an OWNER (who may have sent it), may touch it
+    private NotificationEntity findOwned(Long id) {
+        NotificationEntity entity = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Notification Not Found"));
+        Long me = CurrentUser.id();
+        boolean isRecipient = entity.getUserId() != null && entity.getUserId().equals(me);
+        if (!isRecipient && !CurrentUser.isRole("OWNER")) {
+            throw new ForbiddenException("You do not have access to this notification");
+        }
+        return entity;
+    }
+
     // GET BY ID
     @GetMapping("/getById/{id}")
     public NotificationEntity getById(
             @PathVariable Long id
     ) {
-
-        return repository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Notification Not Found"
-                        )
-                );
+        return findOwned(id);
     }
 
     // SEND NOW
@@ -86,25 +134,19 @@ public class NotificationController {
             @PathVariable Long id
     ) throws Exception {
 
-        NotificationEntity entity =
-                repository.findById(id)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Notification Not Found"
-                                )
-                        );
+        NotificationEntity entity = findOwned(id);
 
         service.sendToUser(entity);
 
         return "Notification Sent Successfully";
     }
 
-    // SAVE TOKEN
+    // SAVE TOKEN — always for the caller's own device
     @PostMapping("/saveToken")
     public UserNotificationToken saveToken(
             @RequestBody UserNotificationToken token
     ) {
-
+        token.setUserId(CurrentUser.id());
         return tokenRepository.save(token);
     }
 
@@ -116,7 +158,8 @@ public class NotificationController {
 
         UserNotificationToken token =
                 tokenRepository.findById(id)
-                        .orElseThrow();
+                        .orElseThrow(() -> new ResourceNotFoundException("Token not found"));
+        CurrentUser.requireSelf(token.getUserId());
 
         token.setIsActive(false);
 
@@ -131,13 +174,8 @@ public class NotificationController {
             @RequestBody SendNotificationRequest request
     ) {
 
-        NotificationEntity entity =
-                repository.findById(id)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Notification Not Found"
-                                )
-                        );
+        NotificationEntity entity = findOwned(id);
+        String before = auditService.snapshot(entity);
 
         entity.setUserId(request.getUserId());
 
@@ -171,7 +209,9 @@ public class NotificationController {
             );
         }
 
-        return repository.save(entity);
+        NotificationEntity saved = repository.save(entity);
+        auditService.logRaw(AuditAction.UPDATE, "Notification", id, before, saved);
+        return saved;
     }
 
 
@@ -181,7 +221,10 @@ public class NotificationController {
             @PathVariable Long id
     ) {
 
-        repository.deleteById(id);
+        NotificationEntity entity = findOwned(id);
+        String before = auditService.snapshot(entity);
+        repository.delete(entity);
+        auditService.logRaw(AuditAction.DELETE, "Notification", id, before, null);
 
         return "Notification Deleted Successfully";
     }
@@ -193,13 +236,13 @@ public class NotificationController {
             @PathVariable Long id
     ) {
 
-        NotificationEntity entity =
-                repository.findById(id)
-                        .orElseThrow();
+        NotificationEntity entity = findOwned(id);
+        String before = auditService.snapshot(entity);
 
         entity.setIsActive(false);
 
-        repository.save(entity);
+        NotificationEntity saved = repository.save(entity);
+        auditService.logRaw(AuditAction.STATUS_CHANGE, "Notification", id, before, saved);
 
         return "Notification Disabled";
     }
@@ -211,13 +254,13 @@ public class NotificationController {
             @PathVariable Long id
     ) {
 
-        NotificationEntity entity =
-                repository.findById(id)
-                        .orElseThrow();
+        NotificationEntity entity = findOwned(id);
+        String before = auditService.snapshot(entity);
 
         entity.setIsActive(true);
 
-        repository.save(entity);
+        NotificationEntity saved = repository.save(entity);
+        auditService.logRaw(AuditAction.STATUS_CHANGE, "Notification", id, before, saved);
 
         return "Notification Enabled";
     }
@@ -228,7 +271,7 @@ public class NotificationController {
     public List<UserNotificationToken> getTokens(
             @PathVariable Long userId
     ) {
-
+        CurrentUser.requireSelf(userId);
         return tokenRepository.findByUserId(userId);
     }
 
@@ -239,7 +282,10 @@ public class NotificationController {
             @PathVariable Long id
     ) {
 
-        tokenRepository.deleteById(id);
+        UserNotificationToken token = tokenRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Token not found"));
+        CurrentUser.requireSelf(token.getUserId());
+        tokenRepository.delete(token);
 
         return "Token Deleted Successfully";
     }
@@ -251,12 +297,33 @@ public class NotificationController {
 
         UserNotificationToken token =
                 tokenRepository.findById(id)
-                        .orElseThrow();
+                        .orElseThrow(() -> new ResourceNotFoundException("Token not found"));
+        CurrentUser.requireSelf(token.getUserId());
 
         token.setIsActive(true);
 
         tokenRepository.save(token);
 
         return "Token Enabled";
+    }
+
+    // ✅ Module 6 — per-type Push/In-App/SMS/Email preferences
+    @Operation(summary = "Get notification preferences", description = "Returns one row per known notification type "
+            + "(BOOKING, PAYMENT, DOCUMENT_EXPIRY, RATE_ALERT, MAINTENANCE, PAYROLL, CHAT, GENERAL), synthesizing "
+            + "defaults (push+in-app on, sms+email off) for any type the user hasn't customized.")
+    @GetMapping("/preferences/{userId}")
+    public List<NotificationPreference> getPreferences(@PathVariable Long userId) {
+        return preferenceService.getForUser(userId);
+    }
+
+    @Operation(summary = "Update a notification preference", description = "Upserts the caller's Push/In-App/SMS/Email "
+            + "preference for one notification type. SMS/Email flags are stored but have no effect yet — no sender "
+            + "is wired up for those channels.")
+    @PutMapping("/preferences/{userId}")
+    public NotificationPreference updatePreference(
+            @PathVariable Long userId,
+            @Valid @RequestBody NotificationPreferenceRequest request
+    ) {
+        return preferenceService.upsert(userId, request);
     }
 }

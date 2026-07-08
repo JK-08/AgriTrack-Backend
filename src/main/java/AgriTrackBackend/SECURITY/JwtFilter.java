@@ -34,14 +34,18 @@ public class JwtFilter implements Filter {
 
                 String username = jwtUtil.extractUsername(token);
                 String role = jwtUtil.extractRole(token);
+                Long userId = jwtUtil.extractUserId(token);
 
-                // ✅ FIX HERE
                 SimpleGrantedAuthority authority =
                         new SimpleGrantedAuthority("ROLE_" + role);
 
+                // ✅ Principal carries the real userId so services can do
+                // ownership checks instead of trusting ids from the client.
+                AuthenticatedUser principal = new AuthenticatedUser(userId, username, role);
+
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(
-                                username,
+                                principal,
                                 null,
                                 Collections.singleton(authority)
                         );
