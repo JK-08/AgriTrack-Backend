@@ -34,16 +34,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
-		<!-- Loads a local .env file into the Spring Environment so the
-		     ${VAR:default} placeholders in application.properties resolve
-		     from it during local development, without needing the shell to
-		     export every variable. In real deployments the platform (Docker/
-		     systemd/CI secrets) sets these as real env vars and .env is unused. -->
-		<dependency>
-			<groupId>me.paulschwarz</groupId>
-			<artifactId>spring-dotenv</artifactId>
-			<version>4.0.0</version>
-		</dependency>
+		<!-- Local .env is now loaded via spring.config.import in
+		     application.properties (Spring Boot's native mechanism) — see
+		     the comment there. spring-dotenv's EnvironmentPostProcessor was
+		     silently failing to register under Spring Boot 4.0.5, so it was
+		     removed rather than left as dead weight. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
